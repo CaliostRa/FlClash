@@ -1,0 +1,233 @@
+name: Android Firefox 148 (ARM64 and ARMv7)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - firefox148-reality
+    tags:
+      - 'pq-v*'
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: '3.47.6'
+  GO_VERSION: '1.27.1'
+  NDK_VERSION: r28c
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout pinned sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Apply FLClash core compatibility patch
+        run: ./tool/apply_core_patches.sh
+
+      - name: Setup Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: 1.99.0
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@2817442ee7c3346c1eb7d2ec60263c93206ba14f # v1
+        id: ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+          link-to-sdk: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Verify Firefox 148 and YAML compatibility
+        working-directory: core
+        run: |
+          go test -count=1 .
+          go test -count=1 github.com/metacubex/mihomo/component/tls
+          tags="$(sed -n 's/^tags: *//p' ../build_config.yaml)"
+          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go vet "-tags=$tags" . ./mobile ./tun ./platform
+
+      - name: Verify side-by-side Android identity
+        run: flutter test test/android_application_id_test.dart
+
+      - name: Verify Flutter application
+        run: |
+          flutter analyze --no-fatal-infos
+          dart run tool/test.dart -- --reporter expanded --coverage
+          dart run tool/check_coverage.dart coverage/lcov.info 75
+
+      - name: Fetch pinned CA certificates
+        env:
+          CA_BUNDLE: cacert-2026-09-25.pem
+          CA_BUNDLE_SHA256: a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505
+        run: |
+          bundle=core/Clash.Meta/component/ca/ca-certificates.crt
+          curl -fsSL --retry 3 -o "$bundle" "https://curl.se/ca/$CA_BUNDLE"
+          echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
+
+      - name: Build arm64-v8a APK
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: dart setup.dart android --env stable --targets apk --arch arm64
+
+      - name: Configure Android release signing
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_STORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" |
+            base64 --decode > "${{ runner.temp }}/flclash-pq-release.jks"
+
+      - name: Build signed arm64-v8a APK
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          FLCLASH_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/flclash-pq-release.jks
+          FLCLASH_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          FLCLASH_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FLCLASH_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          FLCLASH_REQUIRE_RELEASE_SIGNING: 'true'
+        run: dart setup.dart android --env stable --targets apk --arch arm64
+
+      - name: Build signed armeabi-v7a APK
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          FLCLASH_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/flclash-pq-release.jks
+          FLCLASH_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          FLCLASH_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FLCLASH_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          FLCLASH_REQUIRE_RELEASE_SIGNING: 'true'
+        run: dart setup.dart android --env stable --targets apk --arch arm
+
+      - name: Remove Android release key
+        if: always() && startsWith(github.ref, 'refs/tags/')
+        run: shred --remove "${{ runner.temp }}/flclash-pq-release.jks"
+
+      - name: Verify Android JVM modules
+        working-directory: android
+        run: >-
+          ./gradlew
+          :common:testDebugUnitTest
+          :service:testDebugUnitTest
+          :app:testDebugUnitTest
+          -Ptarget-platform=android-arm64
+          -x :app:compileFlutterBuildDebug
+          -x :app:copyFlutterAssetsDebug
+
+      - name: Verify Android APK(s)
+        env:
+          ANDROID_SIGNING_CERT_SHA256: ${{ secrets.ANDROID_SIGNING_CERT_SHA256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          find dist -maxdepth 2 -type f -name '*.apk' -print
+          aapt_bin="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -name aapt -print | sort -V | tail -n 1)"
+          apksigner_bin="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -name apksigner -print | sort -V | tail -n 1)"
+          test -x "$aapt_bin" || { echo "::error::Android aapt not found"; exit 1; }
+          abis=(arm64-v8a)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then abis+=(armeabi-v7a); fi
+          for abi in "${abis[@]}"; do
+            apk="$(find dist -type f -name "*${abi}*.apk" -print -quit)"
+            test -n "$apk" && test -f "$apk" || { echo "::error::Missing APK for $abi in dist/"; exit 1; }
+            echo "Checking $apk"
+            application_id="$("$aapt_bin" dump badging "$apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
+            test "$application_id" = com.follow.clash.pq || { echo "::error::Unexpected applicationId $application_id"; exit 1; }
+            entries="$RUNNER_TEMP/apk-entries-${abi}.txt"
+            unzip -Z1 "$apk" > "$entries"
+            test "$(awk -F/ '/^lib\// {print $2}' "$entries" | sort -u)" = "$abi" || { echo "::error::Unexpected APK ABI contents for $abi"; exit 1; }
+            grep -Fx "lib/$abi/libclash.so" "$entries" >/dev/null || { echo "::error::libclash.so missing for $abi"; exit 1; }
+            if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+              test -x "$apksigner_bin" || { echo "::error::Android apksigner not found"; exit 1; }
+              signer="$("$apksigner_bin" verify --print-certs "$apk")" || { echo "::error::Invalid APK signature for $abi"; exit 1; }
+              certificate_sha256="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<<"$signer" | tr 'A-F' 'a-f' | tr -d '\r')"
+              test "${#certificate_sha256}" -eq 64 || { echo "::error::Cannot read SHA256 of signing certificate"; exit 1; }
+              echo "Release signer certificate SHA-256 for $abi: $certificate_sha256"
+              if grep -q 'CN=Android Debug' <<<"$signer"; then
+                echo "::error::Debug signature is not accepted for releases"
+                exit 1
+              fi
+              if [[ -n "$ANDROID_SIGNING_CERT_SHA256" && "$certificate_sha256" != "${ANDROID_SIGNING_CERT_SHA256,,}" ]]; then
+                echo "::error::Signer certificate differs from configured ANDROID_SIGNING_CERT_SHA256"
+                exit 1
+              fi
+            fi
+            (cd "$(dirname "$apk")" && sha256sum "$(basename "$apk")") > "$apk.sha256"
+          done
+
+      - name: Upload verified Android APK(s) and checksums
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: FLClash-PQ-Android-APKs
+          path: |
+            dist/*.apk
+            dist/*.apk.sha256
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified APK
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: FLClash-PQ-Android-APKs
+          path: dist
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          name: FLClash PQ ${{ github.ref_name }}
+          files: dist/*
+          fail_on_unmatched_files: true
+          make_latest: true
+          body: |
+            FLClash PQ for Android arm64-v8a and armeabi-v7a, with Firefox 148, X25519MLKEM768,
+            REALITY compatibility, and the separate package ID com.follow.clash.pq.
+
+            The APK is signed with the persistent FLClash PQ release key.
+            If a debug-signed test APK is installed, uninstall it once before
+            installing this release. Future signed releases can update normally.
+            Upstream: https://github.com/chen08209/FlClash
+            Fork: https://github.com/CaliostRa/FlClash
+
+            Notes: both APKs are signed with the same persistent signing key.
+            To update an existing installation, APK signatures must match.
+            Release assets include per-file SHA-256 checksums.
