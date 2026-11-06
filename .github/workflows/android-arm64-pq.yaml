@@ -237,7 +237,7 @@ jobs:
           prerelease: true
           files: dist/*
           fail_on_unmatched_files: true
-          make_latest: true
+          make_latest: false
           body: |
             FLClash PQ for Android arm64-v8a and armeabi-v7a, with Firefox 148, X25519MLKEM768,
             REALITY compatibility, and the separate package ID com.follow.clash.pq.
