@@ -1,0 +1,6 @@
+Release request: FLClashPQ pq-v0.9.3.2
+Source: main
+Platforms: Android arm64-v8a, armeabi-v7a
+Signing: configured GitHub Actions release keystore secrets
+GitHub Release: stable/latest (subject to successful CI checks)
+Issued: 2026-11-06
