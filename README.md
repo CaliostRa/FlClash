@@ -14,22 +14,22 @@
 
 ## Зачем создан форк
 
-В Xray-core 26.9.8+ изменились требования к рукопожатию REALITY: для некоторых новых серверных конфигураций требуется гибридная группа обмена ключами **X25519MLKEM768**. В FLClash 0.9.3 обычный отпечаток Mihomo \`firefox\` имитировал Firefox 120 без такой группы, поэтому соединение с Xray-core 26.10.31 могло не устанавливаться. Отпечаток \`chrome\` поддерживал её, но в некоторых мобильных сетях наблюдались нестабильные соединения.
+В Xray-core 26.9.8+ изменились требования к рукопожатию REALITY: для некоторых новых серверных конфигураций требуется гибридная группа обмена ключами **X25519MLKEM768**. В FLClash 0.9.3 обычный отпечаток Mihomo `firefox` имитировал Firefox 120 без такой группы, поэтому соединение с Xray-core 26.10.31 могло не устанавливаться. Отпечаток `chrome` поддерживал её, но в некоторых мобильных сетях наблюдались нестабильные соединения.
 
-Цель форка — **сохранить настройки, маршрутизацию, DNS, подписки и интерфейс FLClash**, но вернуть возможность использовать современный отпечаток \`firefox\` с актуальным Xray/REALITY без отката сервера.
+Цель форка — **сохранить настройки, маршрутизацию, DNS, подписки и интерфейс FLClash**, но вернуть возможность использовать современный отпечаток `firefox` с актуальным Xray/REALITY без отката сервера.
 
 ## Что изменено относительно оригинального FLClash 0.9.3
 
 | Компонент | Оригинал | FLClash PQ |
 |---|---|---|
-| TLS-отпечаток \`firefox\` | Firefox 120 в штатном uTLS | **Firefox 148** через \`legiz-ru/prizrak-utls\` |
+| TLS-отпечаток `firefox` | Firefox 120 в штатном uTLS | **Firefox 148** через `legiz-ru/prizrak-utls` |
 | REALITY и гибридный обмен | Старый Firefox без X25519MLKEM768 | **X25519MLKEM768 + X25519** в ClientHello |
 | Проверка версии REALITY | Исходное поведение Mihomo | Совместимые с новым Xray байты версии клиента |
-| Старое поле \`reality-opts.support-x25519mlkem768\` | Используется штатным Mihomo | Принимается как совместимый устаревший параметр |
-| Идентификатор Android-приложения | \`com.follow.clash\` | **\`com.follow.clash.pq\`** — установка рядом с оригиналом |
+| Старое поле `reality-opts.support-x25519mlkem768` | Используется штатным Mihomo | Принимается как совместимый устаревший параметр |
+| Идентификатор Android-приложения | `com.follow.clash` | **`com.follow.clash.pq`** — установка рядом с оригиналом |
 | Сборки этого форка | Официальные APK проекта | APK для **arm64-v8a** и **armeabi-v7a**, собственные GitHub Actions |
 
-Технически изменения находятся в \`core/go.mod\`, патче для \`Clash.Meta\`, Android-конфигурации сборки, тестах и GitHub Actions. Реализации VLESS, xHTTP, gRPC, Hysteria2, Trojan и пользовательский интерфейс намеренно не заменялись целиком.
+Технически изменения находятся в `core/go.mod`, патче для `Clash.Meta`, Android-конфигурации сборки, тестах и GitHub Actions. Реализации VLESS, xHTTP, gRPC, Hysteria2, Trojan и пользовательский интерфейс намеренно не заменялись целиком.
 
 Подробный технический отчёт: [reports/firefox148-android-arm64.md](reports/firefox148-android-arm64.md). Исходная библиотека: [Prizrak uTLS](https://github.com/legiz-ru/prizrak-utls).
 
@@ -47,15 +47,15 @@
 
 Используйте существующий сервер, UUID, SNI, public-key, short-id и транспорт. Для REALITY можно указать:
 
-\`\`\`yaml
+```yaml
 client-fingerprint: firefox
 reality-opts:
   public-key: "ваш public-key"
   short-id: "ваш short-id"
   support-x25519mlkem768: true
-\`\`\`
+```
 
-Последняя строка сохранена для совместимости с существующими Mihomo-профилями; в этой модификации современный Firefox уже содержит нужный гибридный key share. Если подписка автоматически выдаёт \`chrome\`, измените правило генерации подписки на стороне сервера либо локальное переопределение только для этого клиента.
+Последняя строка сохранена для совместимости с существующими Mihomo-профилями; в этой модификации современный Firefox уже содержит нужный гибридный key share. Если подписка автоматически выдаёт `chrome`, измените правило генерации подписки на стороне сервера либо локальное переопределение только для этого клиента.
 
 Это исправление **совместимости REALITY**, а не гарантия прохождения любых сетевых фильтров, стабильности любой мобильной сети или работы всех конфигураций xHTTP.
 
@@ -63,7 +63,7 @@ reality-opts:
 
 Основа — FLClash 0.9.3, Flutter 3.47.6, Go 1.27.1, Android SDK/NDK r28c и Rust.
 
-\`\`\`bash
+```bash
 git clone --recursive https://github.com/CaliostRa/FlClash.git
 cd FlClash
 flutter pub get
@@ -73,9 +73,9 @@ dart setup.dart android --arch arm64 --targets apk
 
 # ARMv7
 dart setup.dart android --arch arm --targets apk
-\`\`\`
+```
 
-Исходный патч ядра применяется при сборке workflow командой \`./tool/apply_core_patches.sh\`. Для ручной сборки примените его перед \`dart setup.dart\`. Итоговый APK находится в \`dist/\`. Автоматическая сборка ARMv7: [build-armv7.yml](.github/workflows/build-armv7.yml). Релизный workflow: [android-arm64-pq.yaml](.github/workflows/android-arm64-pq.yaml).
+Исходный патч ядра применяется при сборке workflow командой `./tool/apply_core_patches.sh`. Для ручной сборки примените его перед `dart setup.dart`. Итоговый APK находится в `dist/`. Автоматическая сборка ARMv7: [build-armv7.yml](.github/workflows/build-armv7.yml). Релизный workflow: [android-arm64-pq.yaml](.github/workflows/android-arm64-pq.yaml).
 
 ## Авторы и лицензия
 
@@ -90,6 +90,6 @@ dart setup.dart android --arch arm --targets apk
 
 ### English summary
 
-**FLClash PQ** is an **unofficial Android fork of FLClash 0.9.3**. It keeps the original UI and features while integrating Firefox 148 uTLS with **X25519MLKEM768** and REALITY compatibility fixes for newer Xray-core versions. It uses a distinct Android application ID (\`com.follow.clash.pq\`) for side-by-side installation. Android ARM64 and ARMv7 builds are provided through GitHub Actions; release APKs appear under [Releases](https://github.com/CaliostRa/FlClash/releases) once published.
+**FLClash PQ** is an **unofficial Android fork of FLClash 0.9.3**. It keeps the original UI and features while integrating Firefox 148 uTLS with **X25519MLKEM768** and REALITY compatibility fixes for newer Xray-core versions. It uses a distinct Android application ID (`com.follow.clash.pq`) for side-by-side installation. Android ARM64 and ARMv7 builds are provided through GitHub Actions; release APKs appear under [Releases](https://github.com/CaliostRa/FlClash/releases) once published.
 
 This project is not affiliated with or endorsed by the original FLClash, Mihomo or Xray developers. GPL-3.0; see [the upstream project](https://github.com/chen08209/FlClash) for the original application.
