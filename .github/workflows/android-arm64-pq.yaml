@@ -2,6 +2,12 @@ name: Android Firefox 148 (ARM64 and ARMv7)
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Optional new release tag (for example pq-v0.9.3.2). Leave blank for a test build.'
+        required: false
+        default: ''
+        type: string
   push:
     branches:
       - firefox148-reality
@@ -15,6 +21,7 @@ env:
   FLUTTER_VERSION: '3.47.6'
   GO_VERSION: '1.27.1'
   NDK_VERSION: r28c
+  RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '' }}
 
 jobs:
   build:
@@ -91,13 +98,13 @@ jobs:
           echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
 
       - name: Build arm64-v8a APK
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ !(startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '') }}
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: dart setup.dart android --env stable --targets apk --arch arm64
 
       - name: Configure Android release signing
-        if: startsWith(github.ref, 'refs/tags/')
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '')
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
@@ -113,7 +120,7 @@ jobs:
             base64 --decode > "${{ runner.temp }}/flclash-pq-release.jks"
 
       - name: Build signed arm64-v8a APK
-        if: startsWith(github.ref, 'refs/tags/')
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '')
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           FLCLASH_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/flclash-pq-release.jks
@@ -123,8 +130,14 @@ jobs:
           FLCLASH_REQUIRE_RELEASE_SIGNING: 'true'
         run: dart setup.dart android --env stable --targets apk --arch arm64
 
+      - name: Preserve signed arm64 APK for dual-ABI build
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '')
+        run: |
+          mkdir -p "$RUNNER_TEMP/arm64-apk"
+          cp dist/*arm64-v8a*.apk "$RUNNER_TEMP/arm64-apk/"
+
       - name: Build signed armeabi-v7a APK
-        if: startsWith(github.ref, 'refs/tags/')
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '')
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           FLCLASH_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/flclash-pq-release.jks
@@ -134,8 +147,12 @@ jobs:
           FLCLASH_REQUIRE_RELEASE_SIGNING: 'true'
         run: dart setup.dart android --env stable --targets apk --arch arm
 
+      - name: Restore arm64 APK after ARMv7 build
+        if: (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '')
+        run: cp "$RUNNER_TEMP/arm64-apk/"*arm64-v8a*.apk dist/
+
       - name: Remove Android release key
-        if: always() && startsWith(github.ref, 'refs/tags/')
+        if: always() && (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '')
         run: shred --remove "${{ runner.temp }}/flclash-pq-release.jks"
 
       - name: Verify Android JVM modules
@@ -160,7 +177,7 @@ jobs:
           apksigner_bin="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -name apksigner -print | sort -V | tail -n 1)"
           test -x "$aapt_bin" || { echo "::error::Android aapt not found"; exit 1; }
           abis=(arm64-v8a)
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then abis+=(armeabi-v7a); fi
+          if [[ "$RELEASE_BUILD" == true ]]; then abis+=(armeabi-v7a); fi
           for abi in "${abis[@]}"; do
             apk="$(find dist -type f -name "*${abi}*.apk" -print -quit)"
             test -n "$apk" && test -f "$apk" || { echo "::error::Missing APK for $abi in dist/"; exit 1; }
@@ -171,7 +188,7 @@ jobs:
             unzip -Z1 "$apk" > "$entries"
             test "$(awk -F/ '/^lib\// {print $2}' "$entries" | sort -u)" = "$abi" || { echo "::error::Unexpected APK ABI contents for $abi"; exit 1; }
             grep -Fx "lib/$abi/libclash.so" "$entries" >/dev/null || { echo "::error::libclash.so missing for $abi"; exit 1; }
-            if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            if [[ "$RELEASE_BUILD" == true ]]; then
               test -x "$apksigner_bin" || { echo "::error::Android apksigner not found"; exit 1; }
               signer="$("$apksigner_bin" verify --print-certs "$apk")" || { echo "::error::Invalid APK signature for $abi"; exit 1; }
               certificate_sha256="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<<"$signer" | tr 'A-F' 'a-f' | tr -d '\r')"
@@ -199,7 +216,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '')
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -214,7 +231,10 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          name: FLClash PQ ${{ github.ref_name }}
+          name: FLClash PQ ${{ inputs.release_tag || github.ref_name }}
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
           files: dist/*
           fail_on_unmatched_files: true
           make_latest: true
