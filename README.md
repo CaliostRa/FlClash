@@ -1,143 +1,95 @@
 <div align="center">
 
-<img src="assets/images/icon.png" alt="FlClash" width="88">
+<img src="assets/images/icon.png" alt="FLClash" width="88">
 
-# FlClash
+# FLClash PQ · Firefox 148
 
-A multi-platform proxy client based on ClashMeta. Simple to use, open source and ad-free.
+**Неофициальная Android-модификация FLClash с современным TLS-отпечатком Firefox 148 и поддержкой REALITY + X25519MLKEM768.**
 
-**English** · [简体中文](README_zh_CN.md)
-
-[![Release](https://img.shields.io/github/v/release/chen08209/FlClash?style=flat-square&label=release)](https://github.com/chen08209/FlClash/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/chen08209/FlClash/total?style=flat-square&logo=github)](https://github.com/chen08209/FlClash/releases)
-[![License](https://img.shields.io/github/license/chen08209/FlClash?style=flat-square)](LICENSE)
-[![Telegram](https://img.shields.io/badge/Telegram-channel-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/FlClash)
-
-[Website](https://chen08209.github.io/FlClash) · [Download](#download) · [Changelog](CHANGELOG.md) · [Build from source](#build-from-source)
+[Скачать релизы](https://github.com/CaliostRa/FlClash/releases) · [Исходники модификации](https://github.com/CaliostRa/FlClash) · [Оригинальный FLClash](https://github.com/chen08209/FlClash)
 
 </div>
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="snapshots/preview-dark.png">
-    <img alt="FlClash dashboard on a MacBook and a phone" src="snapshots/preview.png" width="92%">
-  </picture>
-</p>
+> **Важно:** это независимый пользовательский форк, а не официальный релиз FLClash или Mihomo. Исходный проект и интерфейс принадлежат своим авторам. Лицензия — [GPL-3.0](LICENSE).
 
-## Features
+## Зачем создан форк
 
-- **One app for Android, Windows, macOS and Linux**, with x64 and ARM64 builds on the desktop.
-- **mihomo (Clash.Meta) core** with rule routing, proxy groups, latency tests, system proxy and TUN mode.
-- **Profiles** from a subscription link or a file, with a built-in editor, override scripts, and custom rules,
-  proxies and proxy groups.
-- **Live views** of connections, requests, DNS queries and logs.
-- **Material You design with Apple-style interaction**: dynamic color, light and dark themes, continuous corners,
-  sheets that snap between heights, and layouts that adapt from phones to desktops.
-- **Backup and restore** through WebDAV or a local file.
-- **Platform touches**: a Quick Settings tile, per-app proxy and Android TV support on Android; a tray menu and
-  global hotkeys on the desktop.
-- **Open source and ad-free**, licensed under GPL-3.0.
+В Xray-core 26.9.8+ изменились требования к рукопожатию REALITY: для некоторых новых серверных конфигураций требуется гибридная группа обмена ключами **X25519MLKEM768**. В FLClash 0.9.3 обычный отпечаток Mihomo \`firefox\` имитировал Firefox 120 без такой группы, поэтому соединение с Xray-core 26.10.31 могло не устанавливаться. Отпечаток \`chrome\` поддерживал её, но в некоторых мобильных сетях наблюдались нестабильные соединения.
 
-## Download
+Цель форка — **сохранить настройки, маршрутизацию, DNS, подписки и интерфейс FLClash**, но вернуть возможность использовать современный отпечаток \`firefox\` с актуальным Xray/REALITY без отката сервера.
 
-Get the latest build from [GitHub Releases](https://github.com/chen08209/FlClash/releases/latest), or open the
-[website](https://chen08209.github.io/FlClash#download), which picks the right file for your device.
+## Что изменено относительно оригинального FLClash 0.9.3
 
-| Platform | Packages | Notes |
-| --- | --- | --- |
-| Android | APK for `arm64-v8a`, `armeabi-v7a` and `x86_64` | Most phones use `arm64-v8a`. Also on the F-Droid repository below. |
-| Windows 10 and later | Installer (`.exe`) or portable `.zip`, for x64 and ARM64 | Pick ARM64 on Snapdragon and other ARM laptops. |
-| macOS 12 and later | DMG for Apple Silicon and Intel | Also on Homebrew. |
-| Linux | `.deb`, `.rpm` and AppImage, for x64 and ARM64 | See the tray note below. |
+| Компонент | Оригинал | FLClash PQ |
+|---|---|---|
+| TLS-отпечаток \`firefox\` | Firefox 120 в штатном uTLS | **Firefox 148** через \`legiz-ru/prizrak-utls\` |
+| REALITY и гибридный обмен | Старый Firefox без X25519MLKEM768 | **X25519MLKEM768 + X25519** в ClientHello |
+| Проверка версии REALITY | Исходное поведение Mihomo | Совместимые с новым Xray байты версии клиента |
+| Старое поле \`reality-opts.support-x25519mlkem768\` | Используется штатным Mihomo | Принимается как совместимый устаревший параметр |
+| Идентификатор Android-приложения | \`com.follow.clash\` | **\`com.follow.clash.pq\`** — установка рядом с оригиналом |
+| Сборки этого форка | Официальные APK проекта | APK для **arm64-v8a** и **armeabi-v7a**, собственные GitHub Actions |
 
-<p>
-  <a href="https://chen08209.github.io/FlClash-fdroid-repo/repo?fingerprint=789D6D32668712EF7672F9E58DEEB15FBD6DCEEC5AE7A4371EA72F2AAE8A12FD"><img alt="Get it on F-Droid" src="snapshots/get-it-on-fdroid.svg" height="56"></a>
-  <a href="https://github.com/chen08209/FlClash/releases/latest"><img alt="Get it on GitHub" src="snapshots/get-it-on-github.svg" height="56"></a>
-</p>
+Технически изменения находятся в \`core/go.mod\`, патче для \`Clash.Meta\`, Android-конфигурации сборки, тестах и GitHub Actions. Реализации VLESS, xHTTP, gRPC, Hysteria2, Trojan и пользовательский интерфейс намеренно не заменялись целиком.
 
-**Homebrew**
+Подробный технический отчёт: [reports/firefox148-android-arm64.md](reports/firefox148-android-arm64.md). Исходная библиотека: [Prizrak uTLS](https://github.com/legiz-ru/prizrak-utls).
 
-```bash
-brew tap chen08209/tap
-brew install --cask flclash
-```
+## Скачать и установить
 
-**Linux tray icon**
+**[GitHub Releases — APK этого форка](https://github.com/CaliostRa/FlClash/releases)**. При отсутствии опубликованного релиза успешные тестовые APK можно найти в артефактах [GitHub Actions](https://github.com/CaliostRa/FlClash/actions) соответствующих запусков.
 
-The `.deb` package installs its own dependencies. With the AppImage or the `.rpm`, install the AyatanaAppIndicator
-library so the tray icon can show:
+- **arm64-v8a** — большинство современных Android-устройств, включая OnePlus 13.
+- **armeabi-v7a** — 32-битные устройства ARM (ARMv7).
+- **x86_64** — APK этого форка пока не выпускается.
 
-```bash
-sudo apt-get install libayatana-appindicator3-1   # Debian and Ubuntu
-sudo dnf install libayatana-appindicator-gtk3     # Fedora
-```
+Установку рядом с оригинальным FLClash обеспечивает отдельный package ID. **Важно о подписях:** тестовая и релизная сборки могут иметь разные сертификаты. Обновление поверх ранее установленной сборки возможно только при совместимых подписях и идентификаторе приложения. Экспортируйте настройки перед заменой. Приложение из этого репозитория не обновляется автоматически из официального репозитория FLClash.
 
-**Unattended desktop**
+### Настройки REALITY в клиенте
 
-FlClash starts the core only after the disclaimer is accepted. Where nobody can click it, such as a container, set
-`FLCLASH_ACCEPT_DISCLAIMER=1` in the app's environment to accept it on first launch.
+Используйте существующий сервер, UUID, SNI, public-key, short-id и транспорт. Для REALITY можно указать:
 
-## Usage
+\`\`\`yaml
+client-fingerprint: firefox
+reality-opts:
+  public-key: "ваш public-key"
+  short-id: "ваш short-id"
+  support-x25519mlkem768: true
+\`\`\`
 
-**Import a profile from a link.** Opening a link in this form imports the subscription into FlClash. The `clashmeta://`
-and `flclash://` schemes work the same way.
+Последняя строка сохранена для совместимости с существующими Mihomo-профилями; в этой модификации современный Firefox уже содержит нужный гибридный key share. Если подписка автоматически выдаёт \`chrome\`, измените правило генерации подписки на стороне сервера либо локальное переопределение только для этого клиента.
 
-```text
-clash://install-config?url=<URL-encoded subscription link>
-```
+Это исправление **совместимости REALITY**, а не гарантия прохождения любых сетевых фильтров, стабильности любой мобильной сети или работы всех конфигураций xHTTP.
 
-**Automate on Android.** Tasker, MacroDroid and similar apps can start, stop or toggle the proxy by starting an
-activity with one of these actions:
+## Сборка из исходников
 
-```text
-com.follow.clash.action.START
-com.follow.clash.action.STOP
-com.follow.clash.action.TOGGLE
-```
+Основа — FLClash 0.9.3, Flutter 3.47.6, Go 1.27.1, Android SDK/NDK r28c и Rust.
 
-From a computer, the same works over adb:
-
-```bash
-adb shell am start -a com.follow.clash.action.TOGGLE
-```
-
-## Build from source
-
-You need [Flutter](https://docs.flutter.dev/get-started/install) 3.47 (release builds use 3.47.6),
-[Go](https://go.dev/dl/) 1.27 and [Rust](https://rustup.rs/) installed through rustup. Each platform builds on its own
-host, except Android, which builds anywhere.
-
-```bash
-git clone --recursive https://github.com/chen08209/FlClash.git
+\`\`\`bash
+git clone --recursive https://github.com/CaliostRa/FlClash.git
 cd FlClash
 flutter pub get
-dart setup.dart android   # or windows, macos, linux
-```
 
-Packages land in `dist/`. The Go core and the Rust libraries are compiled as part of the Flutter build.
+# ARM64
+dart setup.dart android --arch arm64 --targets apk
 
-| Platform | Also needed |
-| --- | --- |
-| Android | Android SDK with the NDK. Add `--arch arm64` to build a single ABI. |
-| Windows | GCC (MinGW-w64) for the core and [Inno Setup](https://jrsoftware.org/isinfo.php) 6 for the installer. |
-| macOS | Xcode and Node.js. The script installs `appdmg` through npm. |
-| Linux | Debian or Ubuntu. The script installs the build packages with apt and downloads `appimagetool`. |
+# ARMv7
+dart setup.dart android --arch arm --targets apk
+\`\`\`
 
-Run `dart setup.dart --help` for the remaining options, such as `--targets` to build only some package formats.
+Исходный патч ядра применяется при сборке workflow командой \`./tool/apply_core_patches.sh\`. Для ручной сборки примените его перед \`dart setup.dart\`. Итоговый APK находится в \`dist/\`. Автоматическая сборка ARMv7: [build-armv7.yml](.github/workflows/build-armv7.yml). Релизный workflow: [android-arm64-pq.yaml](.github/workflows/android-arm64-pq.yaml).
 
-## Support
+## Авторы и лицензия
 
-Starring the repository is the easiest way to support the project. Questions and announcements go to the
-[Telegram channel](https://t.me/FlClash); bugs and feature requests go to
-[GitHub Issues](https://github.com/chen08209/FlClash/issues).
+- Оригинальный проект: **[chen08209/FlClash](https://github.com/chen08209/FlClash)** — интерфейс и приложение.
+- Ядро: **[Mihomo / Clash.Meta](https://github.com/MetaCubeX/mihomo)**.
+- Обновлённая TLS-библиотека: **[legiz-ru/prizrak-utls](https://github.com/legiz-ru/prizrak-utls)**.
+- Доработки совместимости и Android-сборок находятся в этом форке. Это неофициальная сборка, без поддержки со стороны авторов оригинального проекта.
 
-<a href="https://star-history.com/#chen08209/FlClash&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=chen08209/FlClash&type=Date&theme=dark">
-    <img alt="Star history" src="https://api.star-history.com/svg?repos=chen08209/FlClash&type=Date" width="640">
-  </picture>
-</a>
+Код распространяется в соответствии с [GPL-3.0](LICENSE). Используемые компоненты сохраняют собственные лицензии.
 
-## License
+---
 
-FlClash is released under the [GPL-3.0 license](LICENSE).
+### English summary
+
+**FLClash PQ** is an **unofficial Android fork of FLClash 0.9.3**. It keeps the original UI and features while integrating Firefox 148 uTLS with **X25519MLKEM768** and REALITY compatibility fixes for newer Xray-core versions. It uses a distinct Android application ID (\`com.follow.clash.pq\`) for side-by-side installation. Android ARM64 and ARMv7 builds are provided through GitHub Actions; release APKs appear under [Releases](https://github.com/CaliostRa/FlClash/releases) once published.
+
+This project is not affiliated with or endorsed by the original FLClash, Mihomo or Xray developers. GPL-3.0; see [the upstream project](https://github.com/chen08209/FlClash) for the original application.
