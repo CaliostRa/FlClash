@@ -1,6 +1,12 @@
 name: Android Firefox 148 (ARM64 and ARMv7)
 
 on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: 'Release version for the one-time publish workflow'
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       release_tag:
@@ -234,10 +240,10 @@ jobs:
           name: FLClash PQ ${{ inputs.release_tag || github.ref_name }}
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          prerelease: true
+          prerelease: false
           files: dist/*
           fail_on_unmatched_files: true
-          make_latest: false
+          make_latest: true
           body: |
             ## FLClash PQ — Firefox 148 / REALITY
 
@@ -262,6 +268,6 @@ jobs:
             Use `client-fingerprint: firefox` with your existing REALITY subscription.
             This release does not change any Remnawave/Xray server settings.
 
-            Source / documentation: https://github.com/CaliostRa/FlClash
+            Source / documentation: https://github.com/CaliostRa/FLClashPQ
             Original project: https://github.com/chen08209/FlClash (GPL-3.0).
-            This is an unofficial prerelease; ARMv7 runtime was not verified on a physical device.
+            This is an unofficial FLClash fork; ARMv7 runtime has not been verified on a physical device.
