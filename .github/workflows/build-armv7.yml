@@ -15,8 +15,11 @@ jobs:
       - name: Checkout modified FLClash
         uses: actions/checkout@v4
         with:
-          ref: firefox148-reality
+          ref: main
           submodules: recursive
+
+      - name: Apply REALITY Firefox 148 compatibility patch
+        run: ./tool/apply_core_patches.sh
 
       - name: Setup Java
         uses: actions/setup-java@v4
