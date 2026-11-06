@@ -127,7 +127,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
-          FLCLASH_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}\/flclash-pq-release.jks
+          FLCLASH_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/flclash-pq-release.jks
           FLCLASH_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           FLCLASH_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           FLCLASH_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -159,7 +159,9 @@ jobs:
           aapt_bin="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -name aapt -print | sort -V | tail -n 1)"
           apksigner_bin="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -name apksigner -print | sort -V | tail -n 1)"
           test -x "$aapt_bin" || { echo "::error::Android aapt not found"; exit 1; }
-          for abi in arm64-v8a $( [[ "$GITHUB_REF" == refs/tags/* ]] && echo armeabi-v7a ); do
+          abis=(arm64-v8a)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then abis+=(armeabi-v7a); fi
+          for abi in "${abis[@]}"; do
             apk="$(find dist -type f -name "*${abi}*.apk" -print -quit)"
             test -n "$apk" && test -f "$apk" || { echo "::error::Missing APK for $abi in dist/"; exit 1; }
             echo "Checking $apk"
