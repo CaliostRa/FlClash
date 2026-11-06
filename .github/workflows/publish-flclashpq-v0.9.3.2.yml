@@ -1,0 +1,19 @@
+name: Publish FLClashPQ v0.9.3.2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/release-requests/pq-v0.9.3.2.txt
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build, sign and publish Android ARM64 and ARMv7 APKs
+    uses: ./.github/workflows/android-arm64-pq.yaml
+    with:
+      release_tag: pq-v0.9.3.2
+    secrets: inherit
