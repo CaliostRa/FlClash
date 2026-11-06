@@ -6,7 +6,7 @@
 
 **Неофициальная Android-модификация FLClash с современным TLS-отпечатком Firefox 148 и поддержкой REALITY + X25519MLKEM768.**
 
-[Скачать релизы](https://github.com/CaliostRa/FlClash/releases) · [Исходники модификации](https://github.com/CaliostRa/FlClash) · [Оригинальный FLClash](https://github.com/chen08209/FlClash)
+[Скачать релизы](https://github.com/CaliostRa/FLClashPQ/releases) · [Исходники модификации](https://github.com/CaliostRa/FLClashPQ) · [Оригинальный FLClash](https://github.com/chen08209/FlClash)
 
 </div>
 
@@ -35,7 +35,7 @@
 
 ## Скачать и установить
 
-**[GitHub Releases — APK этого форка](https://github.com/CaliostRa/FlClash/releases)**. При отсутствии опубликованного релиза успешные тестовые APK можно найти в артефактах [GitHub Actions](https://github.com/CaliostRa/FlClash/actions) соответствующих запусков.
+**[GitHub Releases — APK этого форка](https://github.com/CaliostRa/FLClashPQ/releases)**. При отсутствии опубликованного релиза успешные тестовые APK можно найти в артефактах [GitHub Actions](https://github.com/CaliostRa/FLClashPQ/actions) соответствующих запусков.
 
 - **arm64-v8a** — большинство современных Android-устройств, включая OnePlus 13.
 - **armeabi-v7a** — 32-битные устройства ARM (ARMv7).
@@ -64,7 +64,7 @@ reality-opts:
 Основа — FLClash 0.9.3, Flutter 3.47.6, Go 1.27.1, Android SDK/NDK r28c и Rust.
 
 ```bash
-git clone --recursive https://github.com/CaliostRa/FlClash.git
+git clone --recursive https://github.com/CaliostRa/FLClashPQ.git
 cd FlClash
 flutter pub get
 
@@ -90,6 +90,6 @@ dart setup.dart android --arch arm --targets apk
 
 ### English summary
 
-**FLClash PQ** is an **unofficial Android fork of FLClash 0.9.3**. It keeps the original UI and features while integrating Firefox 148 uTLS with **X25519MLKEM768** and REALITY compatibility fixes for newer Xray-core versions. It uses a distinct Android application ID (`com.follow.clash.pq`) for side-by-side installation. Android ARM64 and ARMv7 builds are provided through GitHub Actions; release APKs appear under [Releases](https://github.com/CaliostRa/FlClash/releases) once published.
+**FLClash PQ** is an **unofficial Android fork of FLClash 0.9.3**. It keeps the original UI and features while integrating Firefox 148 uTLS with **X25519MLKEM768** and REALITY compatibility fixes for newer Xray-core versions. It uses a distinct Android application ID (`com.follow.clash.pq`) for side-by-side installation. Android ARM64 and ARMv7 builds are provided through GitHub Actions; release APKs appear under [Releases](https://github.com/CaliostRa/FLClashPQ/releases) once published.
 
 This project is not affiliated with or endorsed by the original FLClash, Mihomo or Xray developers. GPL-3.0; see [the upstream project](https://github.com/chen08209/FlClash) for the original application.
