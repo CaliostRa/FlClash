@@ -1,5 +1,7 @@
 <div align="center">
 
+<p><strong>Русский</strong> | <a href="README_EN.md">English</a></p>
+
 <img src="assets/images/icon.png" alt="FLClash" width="88">
 
 # FLClash PQ · Firefox 148
@@ -35,7 +37,7 @@
 
 ## Скачать и установить
 
-**[GitHub Releases — APK этого форка](https://github.com/CaliostRa/FLClashPQ/releases)**. При отсутствии опубликованного релиза успешные тестовые APK можно найти в артефактах [GitHub Actions](https://github.com/CaliostRa/FLClashPQ/actions) соответствующих запусков.
+**[GitHub Releases — APK этого форка](https://github.com/CaliostRa/FLClashPQ/releases)**. Тестовые APK также можно найти в артефактах успешных запусков [GitHub Actions](https://github.com/CaliostRa/FLClashPQ/actions).
 
 - **arm64-v8a** — большинство современных Android-устройств, включая OnePlus 13.
 - **armeabi-v7a** — 32-битные устройства ARM (ARMv7).
@@ -65,8 +67,9 @@ reality-opts:
 
 ```bash
 git clone --recursive https://github.com/CaliostRa/FLClashPQ.git
-cd FlClash
+cd FLClashPQ
 flutter pub get
+./tool/apply_core_patches.sh
 
 # ARM64
 dart setup.dart android --arch arm64 --targets apk
@@ -85,11 +88,3 @@ dart setup.dart android --arch arm --targets apk
 - Доработки совместимости и Android-сборок находятся в этом форке. Это неофициальная сборка, без поддержки со стороны авторов оригинального проекта.
 
 Код распространяется в соответствии с [GPL-3.0](LICENSE). Используемые компоненты сохраняют собственные лицензии.
-
----
-
-### English summary
-
-**FLClash PQ** is an **unofficial Android fork of FLClash 0.9.3**. It keeps the original UI and features while integrating Firefox 148 uTLS with **X25519MLKEM768** and REALITY compatibility fixes for newer Xray-core versions. It uses a distinct Android application ID (`com.follow.clash.pq`) for side-by-side installation. Android ARM64 and ARMv7 builds are provided through GitHub Actions; release APKs appear under [Releases](https://github.com/CaliostRa/FLClashPQ/releases) once published.
-
-This project is not affiliated with or endorsed by the original FLClash, Mihomo or Xray developers. GPL-3.0; see [the upstream project](https://github.com/chen08209/FlClash) for the original application.
