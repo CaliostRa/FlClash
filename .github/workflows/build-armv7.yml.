@@ -1,0 +1,62 @@
+name: FLClash Firefox148 ARMv7
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-armv7:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout modified FLClash
+        uses: actions/checkout@v4
+        with:
+          ref: firefox148-reality
+          submodules: recursive
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: core/go.sum
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.6'
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r28c
+          link-to-sdk: true
+
+      - name: Setup Rust
+        run: rustup target add armv7-linux-androideabi
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Android ARMv7
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: dart setup.dart android --arch arm --targets apk -v
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FLClash-Firefox148-ARMv7
+          path: dist/
+          if-no-files-found: error
