@@ -239,15 +239,29 @@ jobs:
           fail_on_unmatched_files: true
           make_latest: false
           body: |
-            FLClash PQ for Android arm64-v8a and armeabi-v7a, with Firefox 148, X25519MLKEM768,
-            REALITY compatibility, and the separate package ID com.follow.clash.pq.
+            ## FLClash PQ — Firefox 148 / REALITY
 
-            The APK is signed with the persistent FLClash PQ release key.
-            If a debug-signed test APK is installed, uninstall it once before
-            installing this release. Future signed releases can update normally.
-            Upstream: https://github.com/chen08209/FlClash
-            Fork: https://github.com/CaliostRa/FlClash
+            Unofficial Android fork based on FLClash 0.9.3.
 
-            Notes: both APKs are signed with the same persistent signing key.
-            To update an existing installation, APK signatures must match.
-            Release assets include per-file SHA-256 checksums.
+            ### Changes compared with original FLClash
+            - Firefox 148 TLS fingerprint via Prizrak uTLS instead of legacy Firefox 120.
+            - X25519MLKEM768 + X25519 key share support for newer Xray REALITY.
+            - REALITY client-version compatibility adjustment and existing YAML setting compatibility.
+            - Independent Android application ID: `com.follow.clash.pq` (can be installed alongside upstream).
+            - Same FLClash UI, rule routing, DNS, subscriptions, VLESS, xHTTP, gRPC, Hysteria2 and Trojan.
+
+            ### Downloads
+            - `*arm64-v8a.apk`: modern Android ARM64 devices.
+            - `*armeabi-v7a.apk`: 32-bit Android ARMv7 devices.
+            - APK SHA-256 checksums are attached alongside each file.
+
+            Both APKs use the same persistent release signing key. A debug-signed test build
+            may require uninstalling before the first release-signed installation; export
+            your profile/settings before removing an installed build.
+
+            Use `client-fingerprint: firefox` with your existing REALITY subscription.
+            This release does not change any Remnawave/Xray server settings.
+
+            Source / documentation: https://github.com/CaliostRa/FlClash
+            Original project: https://github.com/chen08209/FlClash (GPL-3.0).
+            This is an unofficial prerelease; ARMv7 runtime was not verified on a physical device.
