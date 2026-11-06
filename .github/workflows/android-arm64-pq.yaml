@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - firefox148-reality
+    tags:
+      - 'pq-v*'
 
 permissions:
   contents: read
@@ -89,9 +91,41 @@ jobs:
           echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
 
       - name: Build arm64-v8a APK
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: dart setup.dart android --env stable --targets apk --arch arm64
+
+      - name: Configure Android release signing
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_STORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" |
+            base64 --decode > "${{ runner.temp }}/flclash-pq-release.jks"
+
+      - name: Build signed arm64-v8a APK
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          FLCLASH_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/flclash-pq-release.jks
+          FLCLASH_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          FLCLASH_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FLCLASH_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          FLCLASH_REQUIRE_RELEASE_SIGNING: 'true'
+        run: dart setup.dart android --env stable --targets apk --arch arm64
+
+      - name: Remove Android release key
+        if: always() && startsWith(github.ref, 'refs/tags/')
+        run: shred --remove "${{ runner.temp }}/flclash-pq-release.jks"
 
       - name: Verify Android JVM modules
         working-directory: android
@@ -105,6 +139,8 @@ jobs:
           -x :app:copyFlutterAssetsDebug
 
       - name: Verify APK
+        env:
+          ANDROID_SIGNING_CERT_SHA256: 61b7c8a2e24314fd5337fb4703e2ba1df70318ad2b4fa4247dcc9e8b6b94de63
         run: |
           apk="$(find dist -type f -name '*arm64-v8a*.apk' -print -quit)"
           test -n "$apk" && test -f "$apk"
@@ -116,7 +152,19 @@ jobs:
           unzip -Z1 "$apk" > "$entries"
           test "$(awk -F/ '/^lib\// {print $2}' "$entries" | sort -u)" = arm64-v8a
           grep -Fx 'lib/arm64-v8a/libclash.so' "$entries" >/dev/null
-          sha256sum "$apk" | tee "$apk.sha256"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            apksigner_bin="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -type f -name apksigner -print | sort -V | tail -n 1)"
+            test -x "$apksigner_bin"
+            signer="$("$apksigner_bin" verify --print-certs "$apk")"
+            certificate_sha256="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<<"$signer")"
+            test "$certificate_sha256" = "$ANDROID_SIGNING_CERT_SHA256"
+            if grep -F 'CN=Android Debug' <<<"$signer"; then
+              exit 1
+            fi
+          fi
+          apk_directory="$(dirname "$apk")"
+          apk_name="$(basename "$apk")"
+          (cd "$apk_directory" && sha256sum "$apk_name") | tee "$apk.sha256"
 
       - name: Upload APK and checksum
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -126,3 +174,32 @@ jobs:
             dist/*arm64-v8a*.apk
             dist/*arm64-v8a*.apk.sha256
           if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified APK
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: FLClash-PQ-android-arm64-v8a
+          path: dist
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          name: FLClash PQ ${{ github.ref_name }}
+          files: dist/*
+          fail_on_unmatched_files: true
+          make_latest: true
+          body: |
+            FLClash for Android arm64-v8a with Firefox 148, X25519MLKEM768,
+            REALITY compatibility, and the separate package ID com.follow.clash.pq.
+
+            The APK is signed with the persistent FLClash PQ release key.
+            If a debug-signed test APK is installed, uninstall it once before
+            installing this release. Future signed releases can update normally.
+            A live connection to a private Xray/REALITY server was not tested.

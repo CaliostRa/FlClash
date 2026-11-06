@@ -13,14 +13,33 @@ val localProperties = Properties().apply {
     }
 }
 
-val releaseStoreFile = file("keystore.jks")
-val releaseStorePassword = localProperties.getProperty("storePassword")
-val releaseKeyAlias = localProperties.getProperty("keyAlias")
-val releaseKeyPassword = localProperties.getProperty("keyPassword")
+fun signingValue(environmentName: String, propertyName: String): String? =
+    System.getenv(environmentName)?.takeIf { it.isNotBlank() }
+        ?: localProperties.getProperty(propertyName)?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = file(
+    System.getenv("FLCLASH_ANDROID_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+        ?: "keystore.jks",
+)
+val releaseStorePassword = signingValue(
+    "FLCLASH_ANDROID_STORE_PASSWORD",
+    "storePassword",
+)
+val releaseKeyAlias = signingValue("FLCLASH_ANDROID_KEY_ALIAS", "keyAlias")
+val releaseKeyPassword = signingValue(
+    "FLCLASH_ANDROID_KEY_PASSWORD",
+    "keyPassword",
+)
 val hasReleaseSigning = releaseStoreFile.exists() &&
     releaseStorePassword != null &&
     releaseKeyAlias != null &&
     releaseKeyPassword != null
+val requiresReleaseSigning =
+    System.getenv("FLCLASH_REQUIRE_RELEASE_SIGNING")?.toBoolean() == true
+
+if (requiresReleaseSigning && !hasReleaseSigning) {
+    throw GradleException("Android release signing is required but incomplete")
+}
 
 android {
     namespace = "com.follow.clash"

@@ -25,7 +25,8 @@ Date: 2026-11-06
   Trojan, and existing YAML parsing.
 - Changed only the Android application ID to `com.follow.clash.pq`; the
   namespace and Kotlin package remain unchanged.
-- Added a pinned Android ARM64 GitHub Actions workflow.
+- Added a pinned Android ARM64 GitHub Actions workflow with tag-triggered,
+  persistent release signing and GitHub Release publishing.
 - Added Gradle distribution checksum verification.
 - No Remnawave server or configuration was accessed or changed.
 
@@ -48,17 +49,21 @@ Date: 2026-11-06
 - APK manifest application ID: `com.follow.clash.pq`.
 - APK ABI set: only `arm64-v8a`.
 - Bundled `libclash.so`: ELF64 AArch64 shared object.
-- APK signature: valid Android v2 debug signature (local test artifact).
+- APK signature: valid Android v2 release signature.
+- Release certificate SHA-256:
+  `61b7c8a2e24314fd5337fb4703e2ba1df70318ad2b4fa4247dcc9e8b6b94de63`.
 
-The local and CI artifacts intentionally use a debug signature because no
-release signing secret was supplied. They are installable, but APKs produced
-with different debug keys cannot update one another without uninstalling.
+The release workflow fails closed when its persistent signing key or any
+credential is missing. The key and credentials are stored outside Git and in
+GitHub Actions Secrets; only the public certificate fingerprint is committed.
+An earlier debug-signed test build must be uninstalled once before installing
+the first release-signed APK; later release APKs retain update compatibility.
 
 ## Artifact
 
 - File: `dist/FlClash-0.9.3-android-arm64-v8a.apk`
 - Size: `60,861,097` bytes
-- SHA-256: `e35cd01ae21ac269b4788f936fc37008d822869c34f8288bbb843f555cd9fed5`
+- SHA-256: `fa45bb6aa0d83fb5fdefea8f70570130b67e464783dd7f0729bf92befadd42ed`
 
 ## Unavailable verification
 
