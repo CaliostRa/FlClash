@@ -1,0 +1,100 @@
+diff --git a/component/tls/reality.go b/component/tls/reality.go
+index ff6a0a3d..838e3020 100644
+--- a/component/tls/reality.go
++++ b/component/tls/reality.go
+@@ -29 +29,9 @@ import (
+-const RealityMaxShortIDLen = 8
++const (
++	RealityMaxShortIDLen = 8
++
++	// REALITY interprets these bytes as an Xray-compatible client version.
++	// Keep them aligned with the tested Prizrak-Core REALITY implementation.
++	realityClientVersionMajor byte = 26
++	realityClientVersionMinor byte = 7
++	realityClientVersionPatch byte = 11
++)
+@@ -34,0 +43,2 @@ type RealityConfig struct {
++	// Deprecated: REALITY preserves the selected browser fingerprint.
++	// Kept so existing YAML configurations continue to parse unchanged.
+@@ -53 +63 @@ func GetRealityConn(ctx context.Context, conn net.Conn, fingerprint UClientHello
+-		err := uConn.BuildHandshakeState()
++		err := buildRealityHandshakeState(uConn)
+@@ -58,7 +67,0 @@ func GetRealityConn(ctx context.Context, conn net.Conn, fingerprint UClientHello
+-		if !realityConfig.SupportX25519MLKEM768 { // for X25519MLKEM768 does not work properly with the old reality server
+-			err = BuildRemovedX25519MLKEM768HandshakeState(uConn)
+-			if err != nil {
+-				return nil, err
+-			}
+-		}
+-
+@@ -74,3 +77 @@ func GetRealityConn(ctx context.Context, conn net.Conn, fingerprint UClientHello
+-		hello.SessionId[0] = 1
+-		hello.SessionId[1] = 8
+-		hello.SessionId[2] = 2
++		setRealityClientVersion(hello.SessionId)
+@@ -133,0 +135,10 @@ func GetRealityConn(ctx context.Context, conn net.Conn, fingerprint UClientHello
++func buildRealityHandshakeState(conn *UConn) error {
++	return conn.BuildHandshakeState()
++}
++
++func setRealityClientVersion(sessionID []byte) {
++	sessionID[0] = realityClientVersionMajor
++	sessionID[1] = realityClientVersionMinor
++	sessionID[2] = realityClientVersionPatch
++}
++
+diff --git a/component/tls/reality_pq_test.go b/component/tls/reality_pq_test.go
+new file mode 100644
+index 00000000..1926b4fd
+--- /dev/null
++++ b/component/tls/reality_pq_test.go
+@@ -0,0 +1,49 @@
++package tls
++
++import (
++	"bytes"
++	"net"
++	"testing"
++
++	utls "github.com/metacubex/utls"
++)
++
++func TestRealityPreservesFirefoxHybridKeyShare(t *testing.T) {
++	fingerprint, ok := GetFingerprint("firefox")
++	if !ok {
++		t.Fatal("firefox fingerprint is unavailable")
++	}
++
++	client, server := net.Pipe()
++	defer client.Close()
++	defer server.Close()
++
++	conn := UClient(client, &utls.Config{ServerName: "example.com"}, fingerprint)
++	if err := buildRealityHandshakeState(conn); err != nil {
++		t.Fatalf("build REALITY ClientHello: %v", err)
++	}
++
++	for _, extension := range conn.Extensions {
++		keyShares, ok := extension.(*utls.KeyShareExtension)
++		if !ok {
++			continue
++		}
++		if len(keyShares.KeyShares) < 2 ||
++			keyShares.KeyShares[0].Group != utls.X25519MLKEM768 ||
++			keyShares.KeyShares[1].Group != utls.X25519 {
++			t.Fatalf("REALITY key shares = %v, want X25519MLKEM768 followed by X25519", keyShares.KeyShares)
++		}
++		return
++	}
++	t.Fatal("REALITY ClientHello has no key_share extension")
++}
++
++func TestRealityClientVersionBytes(t *testing.T) {
++	sessionID := make([]byte, 32)
++	setRealityClientVersion(sessionID)
++
++	want := []byte{26, 7, 11}
++	if !bytes.Equal(sessionID[:3], want) {
++		t.Fatalf("REALITY client version = %v, want %v", sessionID[:3], want)
++	}
++}

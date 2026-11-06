@@ -1,0 +1,128 @@
+name: Android ARM64 Firefox 148
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - firefox148-reality
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: '3.47.6'
+  GO_VERSION: '1.27.1'
+  NDK_VERSION: r28c
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout pinned sources
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+
+      - name: Apply FLClash core compatibility patch
+        run: ./tool/apply_core_patches.sh
+
+      - name: Setup Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: 1.99.0
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@2817442ee7c3346c1eb7d2ec60263c93206ba14f # v1
+        id: ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+          link-to-sdk: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Verify Firefox 148 and YAML compatibility
+        working-directory: core
+        run: |
+          go test -count=1 .
+          go test -count=1 github.com/metacubex/mihomo/component/tls
+          tags="$(sed -n 's/^tags: *//p' ../build_config.yaml)"
+          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go vet "-tags=$tags" . ./mobile ./tun ./platform
+
+      - name: Verify side-by-side Android identity
+        run: flutter test test/android_application_id_test.dart
+
+      - name: Verify Flutter application
+        run: |
+          flutter analyze --no-fatal-infos
+          dart run tool/test.dart -- --reporter expanded --coverage
+          dart run tool/check_coverage.dart coverage/lcov.info 75
+
+      - name: Fetch pinned CA certificates
+        env:
+          CA_BUNDLE: cacert-2026-09-25.pem
+          CA_BUNDLE_SHA256: a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505
+        run: |
+          bundle=core/Clash.Meta/component/ca/ca-certificates.crt
+          curl -fsSL --retry 3 -o "$bundle" "https://curl.se/ca/$CA_BUNDLE"
+          echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
+
+      - name: Build arm64-v8a APK
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: dart setup.dart android --env stable --targets apk --arch arm64
+
+      - name: Verify Android JVM modules
+        working-directory: android
+        run: >-
+          ./gradlew
+          :common:testDebugUnitTest
+          :service:testDebugUnitTest
+          :app:testDebugUnitTest
+          -Ptarget-platform=android-arm64
+          -x :app:compileFlutterBuildDebug
+          -x :app:copyFlutterAssetsDebug
+
+      - name: Verify APK
+        run: |
+          apk="$(find dist -type f -name '*arm64-v8a*.apk' -print -quit)"
+          test -n "$apk" && test -f "$apk"
+          aapt_bin="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -type f -name aapt -print | sort -V | tail -n 1)"
+          test -x "$aapt_bin"
+          application_id="$("$aapt_bin" dump badging "$apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
+          test "$application_id" = com.follow.clash.pq
+          entries="$RUNNER_TEMP/apk-entries.txt"
+          unzip -Z1 "$apk" > "$entries"
+          test "$(awk -F/ '/^lib\// {print $2}' "$entries" | sort -u)" = arm64-v8a
+          grep -Fx 'lib/arm64-v8a/libclash.so' "$entries" >/dev/null
+          sha256sum "$apk" | tee "$apk.sha256"
+
+      - name: Upload APK and checksum
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: FLClash-PQ-android-arm64-v8a
+          path: |
+            dist/*arm64-v8a*.apk
+            dist/*arm64-v8a*.apk.sha256
+          if-no-files-found: error
