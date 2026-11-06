@@ -1,4 +1,4 @@
-name: Android ARM64 Firefox 148
+name: Android Firefox 148 (ARM64 and ARMv7)
 
 on:
   workflow_dispatch:
@@ -123,6 +123,17 @@ jobs:
           FLCLASH_REQUIRE_RELEASE_SIGNING: 'true'
         run: dart setup.dart android --env stable --targets apk --arch arm64
 
+      - name: Build signed armeabi-v7a APK
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          FLCLASH_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}\/flclash-pq-release.jks
+          FLCLASH_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          FLCLASH_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FLCLASH_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          FLCLASH_REQUIRE_RELEASE_SIGNING: 'true'
+        run: dart setup.dart android --env stable --targets apk --arch arm
+
       - name: Remove Android release key
         if: always() && startsWith(github.ref, 'refs/tags/')
         run: shred --remove "${{ runner.temp }}/flclash-pq-release.jks"
@@ -138,41 +149,51 @@ jobs:
           -x :app:compileFlutterBuildDebug
           -x :app:copyFlutterAssetsDebug
 
-      - name: Verify APK
+      - name: Verify Android APK(s)
         env:
-          ANDROID_SIGNING_CERT_SHA256: 61b7c8a2e24314fd5337fb4703e2ba1df70318ad2b4fa4247dcc9e8b6b94de63
+          ANDROID_SIGNING_CERT_SHA256: ${{ secrets.ANDROID_SIGNING_CERT_SHA256 }}
+        shell: bash
         run: |
-          apk="$(find dist -type f -name '*arm64-v8a*.apk' -print -quit)"
-          test -n "$apk" && test -f "$apk"
-          aapt_bin="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -type f -name aapt -print | sort -V | tail -n 1)"
-          test -x "$aapt_bin"
-          application_id="$("$aapt_bin" dump badging "$apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
-          test "$application_id" = com.follow.clash.pq
-          entries="$RUNNER_TEMP/apk-entries.txt"
-          unzip -Z1 "$apk" > "$entries"
-          test "$(awk -F/ '/^lib\// {print $2}' "$entries" | sort -u)" = arm64-v8a
-          grep -Fx 'lib/arm64-v8a/libclash.so' "$entries" >/dev/null
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            apksigner_bin="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -type f -name apksigner -print | sort -V | tail -n 1)"
-            test -x "$apksigner_bin"
-            signer="$("$apksigner_bin" verify --print-certs "$apk")"
-            certificate_sha256="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<<"$signer")"
-            test "$certificate_sha256" = "$ANDROID_SIGNING_CERT_SHA256"
-            if grep -F 'CN=Android Debug' <<<"$signer"; then
-              exit 1
+          set -euo pipefail
+          find dist -maxdepth 2 -type f -name '*.apk' -print
+          aapt_bin="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -name aapt -print | sort -V | tail -n 1)"
+          apksigner_bin="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -name apksigner -print | sort -V | tail -n 1)"
+          test -x "$aapt_bin" || { echo "::error::Android aapt not found"; exit 1; }
+          for abi in arm64-v8a $( [[ "$GITHUB_REF" == refs/tags/* ]] && echo armeabi-v7a ); do
+            apk="$(find dist -type f -name "*${abi}*.apk" -print -quit)"
+            test -n "$apk" && test -f "$apk" || { echo "::error::Missing APK for $abi in dist/"; exit 1; }
+            echo "Checking $apk"
+            application_id="$("$aapt_bin" dump badging "$apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
+            test "$application_id" = com.follow.clash.pq || { echo "::error::Unexpected applicationId $application_id"; exit 1; }
+            entries="$RUNNER_TEMP/apk-entries-${abi}.txt"
+            unzip -Z1 "$apk" > "$entries"
+            test "$(awk -F/ '/^lib\// {print $2}' "$entries" | sort -u)" = "$abi" || { echo "::error::Unexpected APK ABI contents for $abi"; exit 1; }
+            grep -Fx "lib/$abi/libclash.so" "$entries" >/dev/null || { echo "::error::libclash.so missing for $abi"; exit 1; }
+            if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+              test -x "$apksigner_bin" || { echo "::error::Android apksigner not found"; exit 1; }
+              signer="$("$apksigner_bin" verify --print-certs "$apk")" || { echo "::error::Invalid APK signature for $abi"; exit 1; }
+              certificate_sha256="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<<"$signer" | tr 'A-F' 'a-f' | tr -d '\r')"
+              test "${#certificate_sha256}" -eq 64 || { echo "::error::Cannot read SHA256 of signing certificate"; exit 1; }
+              echo "Release signer certificate SHA-256 for $abi: $certificate_sha256"
+              if grep -q 'CN=Android Debug' <<<"$signer"; then
+                echo "::error::Debug signature is not accepted for releases"
+                exit 1
+              fi
+              if [[ -n "$ANDROID_SIGNING_CERT_SHA256" && "$certificate_sha256" != "${ANDROID_SIGNING_CERT_SHA256,,}" ]]; then
+                echo "::error::Signer certificate differs from configured ANDROID_SIGNING_CERT_SHA256"
+                exit 1
+              fi
             fi
-          fi
-          apk_directory="$(dirname "$apk")"
-          apk_name="$(basename "$apk")"
-          (cd "$apk_directory" && sha256sum "$apk_name") | tee "$apk.sha256"
+            (cd "$(dirname "$apk")" && sha256sum "$(basename "$apk")") > "$apk.sha256"
+          done
 
-      - name: Upload APK and checksum
+      - name: Upload verified Android APK(s) and checksums
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: FLClash-PQ-android-arm64-v8a
+          name: FLClash-PQ-Android-APKs
           path: |
-            dist/*arm64-v8a*.apk
-            dist/*arm64-v8a*.apk.sha256
+            dist/*.apk
+            dist/*.apk.sha256
           if-no-files-found: error
 
   release:
@@ -185,7 +206,7 @@ jobs:
       - name: Download verified APK
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: FLClash-PQ-android-arm64-v8a
+          name: FLClash-PQ-Android-APKs
           path: dist
 
       - name: Publish GitHub release
@@ -196,10 +217,15 @@ jobs:
           fail_on_unmatched_files: true
           make_latest: true
           body: |
-            FLClash for Android arm64-v8a with Firefox 148, X25519MLKEM768,
+            FLClash PQ for Android arm64-v8a and armeabi-v7a, with Firefox 148, X25519MLKEM768,
             REALITY compatibility, and the separate package ID com.follow.clash.pq.
 
             The APK is signed with the persistent FLClash PQ release key.
             If a debug-signed test APK is installed, uninstall it once before
             installing this release. Future signed releases can update normally.
-            A live connection to a private Xray/REALITY server was not tested.
+            Upstream: https://github.com/chen08209/FlClash
+            Fork: https://github.com/CaliostRa/FlClash
+
+            Notes: both APKs are signed with the same persistent signing key.
+            To update an existing installation, APK signatures must match.
+            Release assets include per-file SHA-256 checksums.
