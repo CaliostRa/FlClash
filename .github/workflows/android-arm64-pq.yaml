@@ -196,9 +196,15 @@ jobs:
             grep -Fx "lib/$abi/libclash.so" "$entries" >/dev/null || { echo "::error::libclash.so missing for $abi"; exit 1; }
             if [[ "$RELEASE_BUILD" == true ]]; then
               test -x "$apksigner_bin" || { echo "::error::Android apksigner not found"; exit 1; }
-              signer="$("$apksigner_bin" verify --print-certs "$apk")" || { echo "::error::Invalid APK signature for $abi"; exit 1; }
-              certificate_sha256="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<<"$signer" | tr 'A-F' 'a-f' | tr -d '\r')"
-              test "${#certificate_sha256}" -eq 64 || { echo "::error::Cannot read SHA256 of signing certificate"; exit 1; }
+              signer="$("$apksigner_bin" verify --verbose --print-certs "$apk")" || { echo "::error::Invalid APK signature for $abi"; exit 1; }
+              # apksigner may list multiple signing certificates or use slightly different whitespace.
+              # Match exactly one 64-character digest from the first signer certificate.
+              certificate_sha256="$(printf '%s\n' "$signer" | sed -nE 's/.*certificate SHA-256 digest:[[:space:]]*([[:xdigit:]]{64}).*/\1/p' | head -n 1 | tr 'A-F' 'a-f' | tr -d '\r')"
+              if [[ ! "$certificate_sha256" =~ ^[a-f0-9]{64}$ ]]; then
+                echo "::error::Cannot parse SHA-256 of signing certificate from apksigner output for $abi"
+                printf '%s\n' "$signer" | grep -Ei 'signer|certificate|verified' || true
+                exit 1
+              fi
               echo "Release signer certificate SHA-256 for $abi: $certificate_sha256"
               if grep -q 'CN=Android Debug' <<<"$signer"; then
                 echo "::error::Debug signature is not accepted for releases"
