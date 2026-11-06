@@ -4,3 +4,5 @@ Platforms: Android arm64-v8a, armeabi-v7a
 Signing: configured GitHub Actions release keystore secrets
 GitHub Release: stable/latest (subject to successful CI checks)
 Issued: 2026-11-06
+
+Retry after fixing Android APK certificate-digest verification in main.
